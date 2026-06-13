@@ -1,0 +1,24 @@
+{
+  "name": "citation-source-viewer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json && vite build",
+    "dev": "vite"
+  },
+  "dependencies": {
+    "pdfjs-dist": "4.8.69",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-pdf": "9.2.1",
+    "streamlit-component-lib": "2.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "6.0.2",
+    "typescript": "5.7.2",
+    "vite": "8.0.16"
+  }
+}

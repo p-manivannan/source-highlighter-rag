@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+chroma_db/
+.streamlit/
+source_viewer/frontend/node_modules/

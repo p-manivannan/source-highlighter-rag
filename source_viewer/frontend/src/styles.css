@@ -1,0 +1,175 @@
+:root {
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  color: #f4f4f5;
+  background: #0e1117;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  background: #0e1117;
+}
+
+button {
+  border: 1px solid #414756;
+  border-radius: 0.4rem;
+  padding: 0.35rem 0.55rem;
+  color: #f4f4f5;
+  background: #252a34;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: #71798a;
+  background: #303642;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.citation-answer {
+  color: #f4f4f5;
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.answer-claim {
+  margin: 0 0 0.65rem;
+}
+
+.answer-claim:last-child {
+  margin-bottom: 0;
+}
+
+.inline-citation {
+  display: inline;
+  margin-left: 0.28rem;
+  border: 0;
+  padding: 0.05rem 0.18rem;
+  color: #7db7ff;
+  background: transparent;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+  vertical-align: baseline;
+}
+
+.inline-citation:hover {
+  color: #abd1ff;
+  background: rgb(75 139 219 / 16%);
+}
+
+.source-viewer {
+  overflow: hidden;
+  border: 1px solid #2d323d;
+  border-radius: 0.65rem;
+  background: #161a22;
+}
+
+.viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem;
+  border-bottom: 1px solid #2d323d;
+}
+
+.document-details {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.document-details strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-details span,
+.zoom-value {
+  color: #a9afbb;
+  font-size: 0.78rem;
+}
+
+.viewer-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+.zoom-value {
+  min-width: 2.8rem;
+  text-align: center;
+}
+
+.viewer-notice {
+  margin: 0.65rem;
+  border-radius: 0.35rem;
+  padding: 0.55rem 0.65rem;
+  font-size: 0.82rem;
+}
+
+.viewer-notice.warning {
+  border: 1px solid #806c2d;
+  color: #f6d96f;
+  background: #302a18;
+}
+
+.viewer-notice.error {
+  border: 1px solid #91434a;
+  color: #ffb4b9;
+  background: #351d20;
+}
+
+.pdf-scroll-area {
+  display: flex;
+  height: 730px;
+  overflow: auto;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 0.75rem;
+  background: #222630;
+}
+
+.react-pdf__Document,
+.react-pdf__Page {
+  margin: 0 auto;
+}
+
+.react-pdf__Page {
+  box-shadow: 0 0.35rem 1.4rem rgb(0 0 0 / 35%);
+}
+
+.source-highlight {
+  border-radius: 1px;
+  color: transparent;
+  background: rgb(255 230 0 / 62%);
+  box-shadow: 0 0 0 1px rgb(255 204 0 / 24%);
+}
+
+.loading-state {
+  padding: 2rem;
+  color: #c3c8d2;
+  text-align: center;
+}
+
+@media (max-width: 560px) {
+  .viewer-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
