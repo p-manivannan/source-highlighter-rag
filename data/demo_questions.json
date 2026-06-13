@@ -1,0 +1,107 @@
+[
+  {
+    "question": "Was the Equifax breach caused by an unknown zero-day vulnerability or a known vulnerability that should have been patched?",
+    "value": "Tests false-premise resistance and distinguishes threat novelty from control failure.",
+    "expected_sources": [
+      "01_house_oversight_equifax_breach_report.pdf",
+      "02_gao_equifax_response_report.pdf",
+      "03_ftc_equifax_complaint.pdf"
+    ],
+    "answer_points": [
+      "known Apache Struts vulnerability CVE-2017-5638",
+      "publicly disclosed in March 2017",
+      "patch was available",
+      "the breach was described as preventable"
+    ]
+  },
+  {
+    "question": "Which control failures allowed attackers to expand from the vulnerable dispute portal to unrelated databases and remain undetected?",
+    "value": "Connects patching, asset inventory, segmentation, credentials, monitoring, and data governance.",
+    "expected_sources": [
+      "01_house_oversight_equifax_breach_report.pdf",
+      "02_gao_equifax_response_report.pdf",
+      "03_ftc_equifax_complaint.pdf"
+    ],
+    "answer_points": [
+      "vulnerability was not identified on the portal",
+      "lack of network segmentation",
+      "plain-text administrative credentials",
+      "expired certificate prevented inspection",
+      "weak access controls and data governance"
+    ]
+  },
+  {
+    "question": "How did major federal customers respond to the breach, including contract and identity-proofing changes?",
+    "value": "Shows how a supplier incident changes public-sector contracts and operating controls.",
+    "expected_sources": [
+      "02_gao_equifax_response_report.pdf"
+    ],
+    "answer_points": [
+      "IRS, SSA, and USPS assessed Equifax controls",
+      "contracts added prompt breach notification",
+      "IRS terminated one Equifax contract",
+      "agencies revised identity-proofing processes"
+    ]
+  },
+  {
+    "question": "Compare the FTC complaint's security allegations with the safeguards required by the stipulated order.",
+    "value": "Separates allegations from binding remediation and maps failures to future controls.",
+    "expected_sources": [
+      "03_ftc_equifax_complaint.pdf",
+      "04_ftc_equifax_stipulated_order.pdf"
+    ],
+    "answer_points": [
+      "patch management confirmation and deadlines",
+      "asset inventory",
+      "access controls and credential protection",
+      "vulnerability and penetration testing",
+      "twenty-year information security program"
+    ]
+  },
+  {
+    "question": "What board certifications, independent assessments, and incident reporting duties did the FTC order impose?",
+    "value": "Extracts governance obligations and recurring compliance deadlines from a court order.",
+    "expected_sources": [
+      "04_ftc_equifax_stipulated_order.pdf"
+    ],
+    "answer_points": [
+      "annual board certification for twenty years",
+      "independent biennial assessments",
+      "assessor must identify gaps and supporting evidence",
+      "covered incident reports",
+      "quarterly board summaries"
+    ]
+  },
+  {
+    "question": "Why did the FCA penalize Equifax Ltd, and what was the final penalty?",
+    "value": "Synthesizes outsourcing oversight, notification, complaints, communications, and financial exposure.",
+    "expected_sources": [
+      "05_fca_equifax_final_notice_2023.pdf"
+    ],
+    "answer_points": [
+      "inadequate intra-group outsourcing risk management",
+      "delayed identification and notification of UK consumers",
+      "complaints quality assurance failures",
+      "misleading public statements",
+      "GBP 11,164,400"
+    ]
+  },
+  {
+    "question": "What enterprise lessons recur across the congressional, GAO, FTC, and FCA records?",
+    "value": "Demonstrates executive synthesis across technical, legal, regulatory, and customer evidence.",
+    "expected_sources": [
+      "01_house_oversight_equifax_breach_report.pdf",
+      "02_gao_equifax_response_report.pdf",
+      "03_ftc_equifax_complaint.pdf",
+      "04_ftc_equifax_stipulated_order.pdf",
+      "05_fca_equifax_final_notice_2023.pdf"
+    ],
+    "answer_points": [
+      "policies must be technically enforced and verified",
+      "asset and vulnerability ownership must be clear",
+      "segmentation and credential controls limit blast radius",
+      "boards remain accountable",
+      "outsourcing does not transfer regulatory responsibility"
+    ]
+  }
+]

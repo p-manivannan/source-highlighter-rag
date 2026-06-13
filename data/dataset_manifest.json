@@ -1,0 +1,61 @@
+{
+  "dataset": "Equifax 2017 Data Breach Enterprise Case File",
+  "version": 1,
+  "documents": [
+    {
+      "filename": "01_house_oversight_equifax_breach_report.pdf",
+      "title": "The Equifax Data Breach",
+      "publisher": "U.S. House Committee on Oversight and Government Reform",
+      "publication_date": "2018-12-10",
+      "category": "Congressional investigation and root-cause report",
+      "source_url": "https://oversight.house.gov/wp-content/uploads/2018/12/Equifax-Report.pdf",
+      "retrieval_url": "https://oversight.house.gov/wp-content/uploads/2018/12/Equifax-Report.pdf",
+      "page_count": 96,
+      "sha256": "d59b6463f2c3e197836946e72112e69dcc896a055e900cf0138729192851fc17"
+    },
+    {
+      "filename": "02_gao_equifax_response_report.pdf",
+      "title": "Data Protection: Actions Taken by Equifax and Federal Agencies in Response to the 2017 Breach",
+      "publisher": "U.S. Government Accountability Office",
+      "publication_date": "2018-08-30",
+      "category": "Federal customer response and control review",
+      "source_url": "https://www.gao.gov/products/gao-18-559",
+      "retrieval_url": "https://web.archive.org/web/20240000000000id_/https://www.gao.gov/assets/700/694158.pdf",
+      "page_count": 40,
+      "sha256": "7f352448054fd5c5faabf799e5895ae2a6780edc1136e22ca9e300cfca6245f8"
+    },
+    {
+      "filename": "03_ftc_equifax_complaint.pdf",
+      "title": "Federal Trade Commission v. Equifax Inc. - Complaint for Permanent Injunction and Other Relief",
+      "publisher": "U.S. Federal Trade Commission",
+      "publication_date": "2019-07-22",
+      "category": "Regulatory complaint and alleged security failures",
+      "source_url": "https://www.ftc.gov/system/files/documents/cases/172_3203_equifax_complaint_7-22-19.pdf",
+      "retrieval_url": "https://www.ftc.gov/system/files/documents/cases/172_3203_equifax_complaint_7-22-19.pdf",
+      "page_count": 24,
+      "sha256": "bcf0fcaac8f2a1e4b842c569ca73e26f1042895ec7a811324111ab85ccbffba5"
+    },
+    {
+      "filename": "04_ftc_equifax_stipulated_order.pdf",
+      "title": "Federal Trade Commission v. Equifax Inc. - Stipulated Order",
+      "publisher": "U.S. Federal Trade Commission",
+      "publication_date": "2019-07-22",
+      "category": "Court-ordered remediation and governance obligations",
+      "source_url": "https://www.ftc.gov/system/files/documents/cases/172_3203_equifax_proposed_order_7-22-19.pdf",
+      "retrieval_url": "https://www.ftc.gov/system/files/documents/cases/172_3203_equifax_proposed_order_7-22-19.pdf",
+      "page_count": 64,
+      "sha256": "2240a3c376d21a0fa8c220eda936b769962a41806e5912e498e29db4584715e1"
+    },
+    {
+      "filename": "05_fca_equifax_final_notice_2023.pdf",
+      "title": "Final Notice to Equifax Limited",
+      "publisher": "UK Financial Conduct Authority",
+      "publication_date": "2023-10-03",
+      "category": "Outsourcing, customer treatment, and enforcement findings",
+      "source_url": "https://www.fca.org.uk/publication/final-notices/equifax-limited-2023.pdf",
+      "retrieval_url": "https://www.fca.org.uk/publication/final-notices/equifax-limited-2023.pdf",
+      "page_count": 41,
+      "sha256": "1740fdbbb3f99458346a38ce1cf235ad6a8f7a3053119e6320b260112ea9418e"
+    }
+  ]
+}
