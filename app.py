@@ -7,8 +7,14 @@ Start the UI after running ingest.py:
 
 from __future__ import annotations
 
+import json
 import os
 import re
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
 import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -20,6 +26,7 @@ from uuid import uuid4
 import chromadb
 import streamlit as st
 from dotenv import load_dotenv
+from google.api_core.exceptions import ResourceExhausted
 from llama_index.core import PromptTemplate, VectorStoreIndex
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.llms.gemini import Gemini
@@ -41,6 +48,11 @@ QUERY_INSTRUCTION = "Represent this sentence for searching relevant passages: "
 VECTOR_TOP_K = 5
 BM25_TOP_K = 5
 FINAL_TOP_K = 8
+EVALUATION_QUESTIONS_PATH = DATA_DIR / "demo_questions.json"
+EVALUATION_RESULTS_PATH = BASE_DIR / "evaluation_results.json"
+EVALUATION_LOG_PATH = BASE_DIR / "evaluation.log"
+DEFAULT_OLLAMA_MODEL = "qwen2.5:3b"
+DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434"
 
 # The required regex recognizes citations such as:
 #     [annual-report.pdf, Chunk 17]
@@ -436,7 +448,12 @@ class HybridSearchEngine:
             for key in ranked_keys
         ]
 
-    def answer(self, query: str) -> tuple[dict[str, Any], list[RetrievedChunk]]:
+    def answer(
+        self,
+        query: str,
+        *,
+        allow_legacy_fallback: bool = True,
+    ) -> tuple[dict[str, Any], list[RetrievedChunk]]:
         """Retrieve context and return a validated structured or legacy answer."""
         retrieved_chunks = self.retrieve(query)
         if not retrieved_chunks:
@@ -466,7 +483,12 @@ class HybridSearchEngine:
                 validate_structured_answer(structured, retrieved_chunks),
                 retrieved_chunks,
             )
+        except ResourceExhausted:
+            # A legacy fallback would make a second request and consume more quota.
+            raise
         except Exception:
+            if not allow_legacy_fallback:
+                raise
             # A provider/schema failure should not make the chat unusable.
             prompt = LEGACY_CITATION_PROMPT.format(
                 context_str=context_str,
@@ -574,6 +596,349 @@ def initialize_session_state() -> None:
         st.session_state.selected_source = None
     if "handled_citation_events" not in st.session_state:
         st.session_state.handled_citation_events = set()
+    requested_page = st.query_params.get("page")
+    if requested_page in {"chat", "evaluation"}:
+        st.session_state.active_page = requested_page
+    elif "active_page" not in st.session_state:
+        st.session_state.active_page = "chat"
+
+
+def render_top_navigation() -> None:
+    """Render compact top-level navigation without introducing a sidebar."""
+    chat_column, evaluation_column, _ = st.columns([1, 1.25, 7])
+    with chat_column:
+        if st.button(
+            "Chat",
+            type="primary" if st.session_state.active_page == "chat" else "secondary",
+            width="stretch",
+        ):
+            st.session_state.active_page = "chat"
+            st.query_params["page"] = "chat"
+            st.rerun()
+    with evaluation_column:
+        if st.button(
+            "Evaluation",
+            type=(
+                "primary"
+                if st.session_state.active_page == "evaluation"
+                else "secondary"
+            ),
+            width="stretch",
+        ):
+            st.session_state.active_page = "evaluation"
+            st.query_params["page"] = "evaluation"
+            st.rerun()
+
+
+def load_evaluation_report() -> dict[str, Any] | None:
+    """Load the latest successful evaluation report, if one exists."""
+    if not EVALUATION_RESULTS_PATH.exists():
+        return None
+    try:
+        with EVALUATION_RESULTS_PATH.open(encoding="utf-8") as handle:
+            report = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return None
+    return report if isinstance(report, dict) else None
+
+
+def evaluation_log_tail(max_lines: int = 30) -> str:
+    """Return enough child-process output to diagnose a failed evaluation."""
+    if not EVALUATION_LOG_PATH.exists():
+        return ""
+    try:
+        lines = EVALUATION_LOG_PATH.read_text(
+            encoding="utf-8",
+            errors="replace",
+        ).splitlines()
+    except OSError:
+        return ""
+    return "\n".join(lines[-max_lines:])
+
+
+def ollama_status() -> tuple[bool, str]:
+    """Check local judge availability without importing Ragas into Streamlit."""
+    provider = os.getenv("EVALUATION_LLM_PROVIDER", "ollama").strip().casefold()
+    model_name = os.getenv("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL).strip()
+    base_url = (
+        os.getenv("OLLAMA_BASE_URL", DEFAULT_OLLAMA_BASE_URL)
+        .strip()
+        .rstrip("/")
+    )
+    if provider != "ollama":
+        return (
+            False,
+            "Set EVALUATION_LLM_PROVIDER=ollama for local Ragas judging.",
+        )
+
+    try:
+        with urllib.request.urlopen(
+            f"{base_url}/api/tags",
+            timeout=2,
+        ) as response:
+            payload = json.load(response)
+    except (OSError, urllib.error.URLError, json.JSONDecodeError):
+        return (
+            False,
+            f"Ollama is not reachable at {base_url}. Install and start Ollama, "
+            f"then run `ollama pull {model_name}`.",
+        )
+
+    installed_models = {
+        str(model.get(field, "")).strip()
+        for model in payload.get("models", [])
+        if isinstance(model, dict)
+        for field in ("name", "model")
+        if str(model.get(field, "")).strip()
+    }
+    if model_name not in installed_models:
+        return (
+            False,
+            f"Local judge '{model_name}' is not installed. "
+            f"Run `ollama pull {model_name}`.",
+        )
+    return True, ""
+
+
+def evaluation_process_error(return_code: int, log_tail: str) -> str:
+    """Convert evaluator log signatures into actionable UI messages."""
+    if "RESOURCE_EXHAUSTED" in log_tail or "Quota exceeded" in log_tail:
+        return (
+            "Gemini API quota was exhausted while generating fresh RAG answers. "
+            "Local Ragas judging uses Ollama and does not consume Gemini quota."
+        )
+    if "Could not reach Ollama" in log_tail or "Ollama is not reachable" in log_tail:
+        return (
+            "Ollama is unavailable. Install and start Ollama, then run "
+            f"`ollama pull {os.getenv('OLLAMA_MODEL', DEFAULT_OLLAMA_MODEL)}`."
+        )
+    if "is not installed" in log_tail and "Ollama model" in log_tail:
+        return (
+            "The configured local judge is missing. Run "
+            f"`ollama pull {os.getenv('OLLAMA_MODEL', DEFAULT_OLLAMA_MODEL)}`."
+        )
+    if "TimeoutError" in log_tail or "timed out" in log_tail.casefold():
+        return (
+            "The local Ollama judge timed out. Confirm Ollama is responsive and "
+            "that the configured model fits available system resources."
+        )
+    if (
+        "Invalid JSON" in log_tail
+        or "ValidationError" in log_tail
+        or "InstructorRetryException" in log_tail
+    ):
+        return (
+            "The local judge returned malformed structured output. Retry the "
+            "evaluation or choose a stronger Ollama model."
+        )
+    if "Ragas returned no valid scores" in log_tail:
+        return (
+            "The local judge did not produce valid Ragas scores. Review the "
+            "evaluation log for malformed output or model errors."
+        )
+    return (
+        f"Evaluator exited with code {return_code}. "
+        "The Streamlit server is still running."
+    )
+
+
+def run_evaluation_process(status, progress) -> tuple[bool, str]:
+    """Run Ragas outside Streamlit so native failures cannot kill the UI."""
+    command = [
+        sys.executable,
+        "-u",
+        str(BASE_DIR / "evaluate_rag.py"),
+        "--questions",
+        str(EVALUATION_QUESTIONS_PATH),
+        "--output",
+        str(EVALUATION_RESULTS_PATH),
+    ]
+    creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    started_at = time.monotonic()
+
+    with EVALUATION_LOG_PATH.open("w", encoding="utf-8") as log_file:
+        process = subprocess.Popen(
+            command,
+            cwd=BASE_DIR,
+            env=os.environ.copy(),
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            creationflags=creation_flags,
+        )
+        while process.poll() is None:
+            elapsed = time.monotonic() - started_at
+            progress_value = min(0.9, 0.05 + elapsed / 600)
+            progress.progress(
+                progress_value,
+                text=f"Evaluation running ({int(elapsed)} seconds)",
+            )
+            status.update(
+                label="Running Ragas evaluation",
+                state="running",
+                expanded=True,
+            )
+            time.sleep(1)
+
+    if process.returncode == 0:
+        progress.progress(1.0, text="Evaluation complete")
+        return True, ""
+    log_tail = evaluation_log_tail()
+    return False, evaluation_process_error(process.returncode, log_tail)
+
+
+def metric_label(metric_name: str) -> str:
+    return metric_name.replace("_", " ").title()
+
+
+def render_evaluation_results(report: dict[str, Any]) -> None:
+    """Render aggregate metrics, failure patterns, and question-level scores."""
+    metadata = report.get("metadata", {})
+    evaluated_at = str(metadata.get("evaluated_at", "")).replace("T", " ")[:19]
+    if evaluated_at:
+        st.caption(f"Last completed evaluation: {evaluated_at} UTC")
+
+    aggregate_scores = report.get("aggregate_scores", {})
+    metric_names = [
+        "context_precision",
+        "context_recall",
+        "faithfulness",
+        "answer_relevancy",
+        "answer_correctness",
+    ]
+    score_values = [
+        item.get("scores", {}).get(name)
+        for item in report.get("per_question", [])
+        for name in metric_names
+    ]
+    if score_values and not any(score is not None for score in score_values):
+        st.error(
+            "This report contains no valid Ragas scores because the scoring jobs "
+            "failed. Restart the evaluation to replace it. Expected-source coverage "
+            "is a separate retrieval diagnostic and did not cause this failure."
+        )
+
+    metric_columns = st.columns(len(metric_names))
+    for column, name in zip(metric_columns, metric_names):
+        score = aggregate_scores.get(name)
+        value = "N/A" if score is None else f"{float(score):.2f}"
+        column.metric(metric_label(name), value)
+
+    with st.expander("What the metrics mean"):
+        st.markdown(
+            """
+- **Context precision:** How much of the retrieved context is relevant.
+- **Context recall:** Whether retrieval found the information needed for the reference answer.
+- **Faithfulness:** Whether answer claims are supported by retrieved context.
+- **Answer relevancy:** How directly the answer addresses the question.
+- **Answer correctness:** How closely the answer matches the reference answer points.
+""".strip()
+        )
+
+    st.subheader("Per-question results")
+    rows = []
+    for item in report.get("per_question", []):
+        row = {
+            "Question": item.get("question", ""),
+            **{
+                metric_label(name): item.get("scores", {}).get(name)
+                for name in metric_names
+            },
+        }
+        rows.append(row)
+    if rows:
+        st.dataframe(rows, width="stretch", hide_index=True)
+
+    failures = report.get("failure_pattern_summary", {})
+    if failures:
+        st.subheader("Failure patterns")
+        for pattern, details in failures.items():
+            message = (
+                f"{details.get('explanation', 'Evaluation issue')} "
+                f"Affected questions: {details.get('question_count', 0)}."
+            )
+            if pattern == "metric_unavailable":
+                st.error(message)
+            elif pattern == "expected_source_coverage":
+                st.warning(f"Retrieval diagnostic: {message}")
+            else:
+                st.warning(message)
+    else:
+        st.success("No recurring failure patterns were found at the configured threshold.")
+
+
+def render_evaluation_page(
+    api_key: str | None,
+    model_name: str,
+    collection_ready: bool,
+    collection_error: str | None,
+) -> None:
+    """Run and display the Ragas triad evaluation."""
+    st.title("RAG Evaluation")
+    st.caption(
+        "Ragas evaluates retrieval quality, generation faithfulness, and answer "
+        "quality against the curated demo questions and reference answer points."
+    )
+    st.caption(
+        "Gemini generates one fresh answer per question; all Ragas judge calls "
+        "run locally through Ollama."
+    )
+
+    report = load_evaluation_report()
+    button_label = "Restart evaluation" if report else "Start evaluation"
+    disabled_reason = None
+    if not collection_ready:
+        disabled_reason = collection_error or "The document index is not ready."
+    elif not api_key:
+        disabled_reason = "GOOGLE_API_KEY is missing."
+    elif not EVALUATION_QUESTIONS_PATH.exists():
+        disabled_reason = f"Missing {EVALUATION_QUESTIONS_PATH.name}."
+    else:
+        ollama_ready, ollama_error = ollama_status()
+        if not ollama_ready:
+            disabled_reason = ollama_error
+
+    if st.button(
+        button_label,
+        type="primary",
+        disabled=disabled_reason is not None,
+    ):
+        progress = st.progress(0.0, text="Starting evaluation")
+        with st.status("Running Ragas evaluation", expanded=True) as status:
+            st.write(
+                "The evaluator runs in an isolated process so the app remains "
+                "available if a model library exits unexpectedly."
+            )
+            try:
+                succeeded, error_message = run_evaluation_process(status, progress)
+            except (OSError, subprocess.SubprocessError) as exc:
+                succeeded = False
+                error_message = f"Could not start the evaluator: {exc}"
+
+            if succeeded:
+                report = load_evaluation_report()
+                status.update(
+                    label="Evaluation complete",
+                    state="complete",
+                    expanded=False,
+                )
+            else:
+                status.update(
+                    label="Evaluation failed",
+                    state="error",
+                    expanded=True,
+                )
+                st.error(error_message)
+                log_tail = evaluation_log_tail()
+                if log_tail:
+                    st.code(log_tail, language="text")
+        progress.empty()
+
+    if disabled_reason:
+        st.warning(disabled_reason)
+    if report:
+        render_evaluation_results(report)
+    else:
+        st.info("No evaluation results yet. Start an evaluation to calculate the metrics.")
 
 
 def extract_valid_citations(
@@ -702,9 +1067,7 @@ def main() -> None:
     st.set_page_config(page_title="Citation-Grounded RAG", layout="wide")
     load_dotenv(BASE_DIR / ".env")
     initialize_session_state()
-
-    st.title("Citation-Grounded Enterprise RAG")
-    st.caption("Hybrid vector + BM25 retrieval with inspectable source chunks")
+    render_top_navigation()
 
     api_key = os.getenv("GOOGLE_API_KEY")
     # This default is deliberately configurable so deployments can choose an
@@ -713,6 +1076,18 @@ def main() -> None:
     if not model_name.startswith("models/"):
         model_name = f"models/{model_name}"
     collection_ready, collection_error = collection_is_ready()
+
+    if st.session_state.active_page == "evaluation":
+        render_evaluation_page(
+            api_key,
+            model_name,
+            collection_ready,
+            collection_error,
+        )
+        return
+
+    st.title("Citation-Grounded Enterprise RAG")
+    st.caption("Hybrid vector + BM25 retrieval with inspectable source chunks")
 
     engine = None
     startup_error = None
