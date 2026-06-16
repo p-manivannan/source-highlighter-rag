@@ -705,7 +705,9 @@ def evaluation_process_error(return_code: int, log_tail: str) -> str:
     if "RESOURCE_EXHAUSTED" in log_tail or "Quota exceeded" in log_tail:
         return (
             "Gemini API quota was exhausted while generating fresh RAG answers. "
-            "Local Ragas judging uses Ollama and does not consume Gemini quota."
+            "Completed answers are checkpointed, so the next run will reuse them "
+            "and continue with any missing questions. Local Ragas judging uses "
+            "Ollama and does not consume Gemini quota."
         )
     if "Could not reach Ollama" in log_tail or "Ollama is not reachable" in log_tail:
         return (
@@ -880,7 +882,8 @@ def render_evaluation_page(
     )
     st.caption(
         "Gemini generates one fresh answer per question; all Ragas judge calls "
-        "run locally through Ollama."
+        "run locally through Ollama. Generated answers are checkpointed so a retry "
+        "resumes missing questions after quota interruptions."
     )
 
     report = load_evaluation_report()
@@ -906,7 +909,8 @@ def render_evaluation_page(
         with st.status("Running Ragas evaluation", expanded=True) as status:
             st.write(
                 "The evaluator runs in an isolated process so the app remains "
-                "available if a model library exits unexpectedly."
+                "available if a model library exits unexpectedly. Gemini answers "
+                "are saved as they complete and reused on retry."
             )
             try:
                 succeeded, error_message = run_evaluation_process(status, progress)

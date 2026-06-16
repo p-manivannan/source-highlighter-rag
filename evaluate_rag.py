@@ -39,6 +39,7 @@ EMBEDDING_MODEL_NAME = "BAAI/bge-base-en-v1.5"
 DEFAULT_EVALUATION_LLM_PROVIDER = "ollama"
 DEFAULT_OLLAMA_MODEL = "qwen2.5:3b"
 DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434"
+ANSWER_CACHE_SCHEMA_VERSION = 1
 METRIC_NAMES = (
     "context_precision",
     "context_recall",
@@ -176,6 +177,17 @@ def parse_args() -> argparse.Namespace:
         help="Destination for the complete evaluation report.",
     )
     parser.add_argument(
+        "--answer-cache",
+        type=Path,
+        default=workspace_path("evaluation_answer_cache.json"),
+        help="Checkpoint file for generated RAG answers.",
+    )
+    parser.add_argument(
+        "--refresh-answers",
+        action="store_true",
+        help="Ignore cached generated answers and regenerate every question.",
+    )
+    parser.add_argument(
         "--failure-threshold",
         type=float,
         default=FAILURE_THRESHOLD,
@@ -247,6 +259,114 @@ def expected_source_coverage(
     )
     matched_count = sum(normalized in retrieved for normalized in expected_lookup)
     return matched_count / len(expected_lookup), missing
+
+
+def load_answer_cache(path: Path) -> list[dict[str, Any]]:
+    """Load cached generated answers, ignoring missing or malformed caches."""
+    if not path.exists():
+        return []
+    try:
+        with path.open(encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(payload, dict):
+        return []
+    if payload.get("schema_version") != ANSWER_CACHE_SCHEMA_VERSION:
+        return []
+    records = payload.get("records")
+    return records if isinstance(records, list) else []
+
+
+def write_answer_cache(path: Path, records: list[dict[str, Any]]) -> None:
+    """Atomically persist generated answer checkpoints."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = path.with_name(f"{path.name}.tmp")
+    payload = {
+        "schema_version": ANSWER_CACHE_SCHEMA_VERSION,
+        "updated_at": datetime.now(UTC).isoformat(),
+        "records": records,
+    }
+    with temporary_path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, ensure_ascii=True)
+        handle.write("\n")
+    temporary_path.replace(path)
+
+
+def answer_cache_signature(
+    *,
+    model_name: str,
+    question_number: int,
+    test_case: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": ANSWER_CACHE_SCHEMA_VERSION,
+        "gemini_model": model_name,
+        "question_number": question_number,
+        "question": str(test_case["question"]).strip(),
+        "expected_sources": test_case.get("expected_sources", []),
+        "answer_points": test_case.get("answer_points", []),
+    }
+
+
+def cached_record_matches(
+    record: dict[str, Any],
+    *,
+    model_name: str,
+    question_number: int,
+    test_case: dict[str, Any],
+) -> bool:
+    expected = answer_cache_signature(
+        model_name=model_name,
+        question_number=question_number,
+        test_case=test_case,
+    )
+    if not all(record.get(key) == value for key, value in expected.items()):
+        return False
+    diagnostics = record.get("retrieval_diagnostics")
+    return (
+        isinstance(record.get("answer"), str)
+        and isinstance(record.get("contexts"), list)
+        and isinstance(record.get("retrieved_sources"), list)
+        and isinstance(diagnostics, dict)
+        and "expected_source_coverage" in diagnostics
+        and "missing_expected_sources" in diagnostics
+    )
+
+
+def find_cached_answer(
+    records: list[dict[str, Any]],
+    *,
+    model_name: str,
+    question_number: int,
+    test_case: dict[str, Any],
+) -> dict[str, Any] | None:
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        if cached_record_matches(
+            record,
+            model_name=model_name,
+            question_number=question_number,
+            test_case=test_case,
+        ):
+            return record
+    return None
+
+
+def upsert_cached_answer(
+    records: list[dict[str, Any]],
+    new_record: dict[str, Any],
+) -> list[dict[str, Any]]:
+    return [
+        record
+        for record in records
+        if not (
+            isinstance(record, dict)
+            and record.get("question_number") == new_record["question_number"]
+            and record.get("gemini_model") == new_record["gemini_model"]
+        )
+    ] + [new_record]
 
 
 def classify_failures(
@@ -337,6 +457,8 @@ def run_evaluation(
     evaluation_provider: str | None = None,
     ollama_model: str | None = None,
     ollama_base_url: str | None = None,
+    answer_cache_path: Path | None = None,
+    refresh_answers: bool = False,
 ) -> dict[str, Any]:
     """Run the complete Ragas evaluation and return the saved report."""
     if not 0.0 <= failure_threshold <= 1.0:
@@ -359,6 +481,11 @@ def run_evaluation(
     ).strip()
 
     questions = load_test_questions(questions_path)
+    cached_answers = (
+        []
+        if answer_cache_path is None or refresh_answers
+        else load_answer_cache(answer_cache_path)
+    )
     if engine is None:
         from app import load_engine
 
@@ -368,12 +495,6 @@ def run_evaluation(
     sample_records: list[dict[str, Any]] = []
     for index, test_case in enumerate(questions, start=1):
         question = str(test_case["question"]).strip()
-        answer_payload, retrieved_chunks = engine.answer(
-            question,
-            allow_legacy_fallback=False,
-        )
-        answer = extract_answer_text(answer_payload)
-        contexts = [chunk.text for chunk in retrieved_chunks]
         ground_truth = concatenate_answer_points(test_case["answer_points"])
         if not ground_truth:
             raise ValueError(
@@ -381,11 +502,50 @@ def run_evaluation(
                 "Ragas metrics cannot be calculated."
             )
 
-        retrieved_sources = list(dict.fromkeys(chunk.source_file for chunk in retrieved_chunks))
-        coverage, missing_sources = expected_source_coverage(
-            test_case.get("expected_sources", []),
-            retrieved_sources,
+        cached_record = find_cached_answer(
+            cached_answers,
+            model_name=model_name,
+            question_number=index,
+            test_case=test_case,
         )
+        if cached_record is None:
+            answer_payload, retrieved_chunks = engine.answer(
+                question,
+                allow_legacy_fallback=False,
+            )
+            answer = extract_answer_text(answer_payload)
+            contexts = [chunk.text for chunk in retrieved_chunks]
+            retrieved_sources = list(
+                dict.fromkeys(chunk.source_file for chunk in retrieved_chunks)
+            )
+            coverage, missing_sources = expected_source_coverage(
+                test_case.get("expected_sources", []),
+                retrieved_sources,
+            )
+            record = {
+                **answer_cache_signature(
+                    model_name=model_name,
+                    question_number=index,
+                    test_case=test_case,
+                ),
+                "answer": answer,
+                "contexts": contexts,
+                "ground_truth": ground_truth,
+                "retrieved_sources": retrieved_sources,
+                "retrieval_diagnostics": {
+                    "expected_source_coverage": coverage,
+                    "missing_expected_sources": missing_sources,
+                },
+            }
+            if answer_cache_path is not None:
+                cached_answers = upsert_cached_answer(cached_answers, record)
+                write_answer_cache(answer_cache_path, cached_answers)
+        else:
+            record = cached_record
+            answer = str(record.get("answer", "")).strip()
+            contexts = [str(context) for context in record.get("contexts", [])]
+            print(f"Reused cached answer {index}/{len(questions)}: {question}")
+
         samples.append(
             SingleTurnSample(
                 user_input=question,
@@ -402,11 +562,8 @@ def run_evaluation(
                 "contexts": contexts,
                 "ground_truth": ground_truth,
                 "expected_sources": test_case.get("expected_sources", []),
-                "retrieved_sources": retrieved_sources,
-                "retrieval_diagnostics": {
-                    "expected_source_coverage": coverage,
-                    "missing_expected_sources": missing_sources,
-                },
+                "retrieved_sources": record.get("retrieved_sources", []),
+                "retrieval_diagnostics": record.get("retrieval_diagnostics", {}),
             }
         )
         if progress_callback is not None:
@@ -517,6 +674,8 @@ def main() -> None:
         questions_path=args.questions,
         output_path=args.output,
         failure_threshold=args.failure_threshold,
+        answer_cache_path=args.answer_cache,
+        refresh_answers=args.refresh_answers,
     )
 
     print("\nAggregate scores:")
