@@ -94,6 +94,21 @@ uv run python evaluate_rag.py --questions data/demo_questions.json --output eval
 
 The evaluation report includes context precision, context recall, faithfulness, answer relevancy, answer correctness, expected-source coverage, and failure-pattern diagnostics.
 
+Run a Codex qualitative audit of the saved evaluation report:
+
+```powershell
+uv run python codex_audit.py
+```
+
+The Codex audit produces `codex_audit_results.json` with the same five Ragas-style scores plus per-question rationales, likely root causes, and recommended fixes. It uses the local Codex CLI through `codex exec`, not an OpenAI API key. The desktop app launcher is not enough; the executable must support `codex exec --output-schema`.
+
+If Codex is installed outside PATH, set `CODEX_BIN` to the full executable path before running the audit or starting Streamlit:
+
+```powershell
+$env:CODEX_BIN="D:\path\to\codex.exe"
+uv run python codex_audit.py
+```
+
 ## Test
 
 ```powershell

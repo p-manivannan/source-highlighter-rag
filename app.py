@@ -33,6 +33,7 @@ from llama_index.llms.gemini import Gemini
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from pydantic import BaseModel, Field
 from rank_bm25 import BM25Okapi
+from codex_audit import resolve_codex_bin
 from source_viewer import (
     render_citation_answer,
     render_source_viewer as render_pdf_source_viewer,
@@ -51,6 +52,8 @@ FINAL_TOP_K = 8
 EVALUATION_QUESTIONS_PATH = DATA_DIR / "demo_questions.json"
 EVALUATION_RESULTS_PATH = BASE_DIR / "evaluation_results.json"
 EVALUATION_LOG_PATH = BASE_DIR / "evaluation.log"
+CODEX_AUDIT_RESULTS_PATH = BASE_DIR / "codex_audit_results.json"
+CODEX_AUDIT_LOG_PATH = BASE_DIR / "codex_audit.log"
 DEFAULT_OLLAMA_MODEL = "qwen2.5:3b"
 DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434"
 
@@ -642,6 +645,18 @@ def load_evaluation_report() -> dict[str, Any] | None:
     return report if isinstance(report, dict) else None
 
 
+def load_codex_audit_report() -> dict[str, Any] | None:
+    """Load the latest Codex audit report, if one exists."""
+    if not CODEX_AUDIT_RESULTS_PATH.exists():
+        return None
+    try:
+        with CODEX_AUDIT_RESULTS_PATH.open(encoding="utf-8") as handle:
+            report = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return None
+    return report if isinstance(report, dict) else None
+
+
 def evaluation_log_tail(max_lines: int = 30) -> str:
     """Return enough child-process output to diagnose a failed evaluation."""
     if not EVALUATION_LOG_PATH.exists():
@@ -654,6 +669,33 @@ def evaluation_log_tail(max_lines: int = 30) -> str:
     except OSError:
         return ""
     return "\n".join(lines[-max_lines:])
+
+
+def codex_audit_log_tail(max_lines: int = 30) -> str:
+    """Return enough Codex audit output to diagnose a failed audit run."""
+    if not CODEX_AUDIT_LOG_PATH.exists():
+        return ""
+    try:
+        lines = CODEX_AUDIT_LOG_PATH.read_text(
+            encoding="utf-8",
+            errors="replace",
+        ).splitlines()
+    except OSError:
+        return ""
+    return "\n".join(lines[-max_lines:])
+
+
+def codex_status() -> tuple[bool, str]:
+    """Check whether the local Codex CLI is available for audit mode."""
+    resolved_codex = resolve_codex_bin(os.getenv("CODEX_BIN", "codex"))
+    if resolved_codex is None:
+        return (
+            False,
+            "Codex CLI with exec audit mode was not found. Set CODEX_BIN to "
+            "the full CLI executable path if it is installed outside PATH, "
+            "then restart Streamlit.",
+        )
+    return True, ""
 
 
 def ollama_status() -> tuple[bool, str]:
@@ -788,6 +830,64 @@ def run_evaluation_process(status, progress) -> tuple[bool, str]:
     return False, evaluation_process_error(process.returncode, log_tail)
 
 
+def run_codex_audit_process(status, progress) -> tuple[bool, str]:
+    """Run Codex audit outside Streamlit so failures cannot kill the UI."""
+    resolved_codex = resolve_codex_bin(os.getenv("CODEX_BIN", "codex"))
+    if resolved_codex is None:
+        return (
+            False,
+            "Codex CLI with exec audit mode was not found. Set CODEX_BIN and "
+            "restart Streamlit.",
+        )
+
+    command = [
+        sys.executable,
+        "-u",
+        str(BASE_DIR / "codex_audit.py"),
+        "--input",
+        str(EVALUATION_RESULTS_PATH),
+        "--output",
+        str(CODEX_AUDIT_RESULTS_PATH),
+        "--codex-bin",
+        resolved_codex,
+    ]
+    creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    started_at = time.monotonic()
+
+    with CODEX_AUDIT_LOG_PATH.open("w", encoding="utf-8") as log_file:
+        process = subprocess.Popen(
+            command,
+            cwd=BASE_DIR,
+            env=os.environ.copy(),
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            creationflags=creation_flags,
+        )
+        while process.poll() is None:
+            elapsed = time.monotonic() - started_at
+            progress_value = min(0.9, 0.05 + elapsed / 600)
+            progress.progress(
+                progress_value,
+                text=f"Codex audit running ({int(elapsed)} seconds)",
+            )
+            status.update(
+                label="Running Codex audit",
+                state="running",
+                expanded=True,
+            )
+            time.sleep(1)
+
+    if process.returncode == 0:
+        progress.progress(1.0, text="Codex audit complete")
+        return True, ""
+    log_tail = codex_audit_log_tail()
+    return (
+        False,
+        f"Codex audit exited with code {process.returncode}. "
+        "The Streamlit server is still running.",
+    )
+
+
 def metric_label(metric_name: str) -> str:
     return metric_name.replace("_", " ").title()
 
@@ -868,6 +968,75 @@ def render_evaluation_results(report: dict[str, Any]) -> None:
         st.success("No recurring failure patterns were found at the configured threshold.")
 
 
+def render_codex_audit_results(report: dict[str, Any]) -> None:
+    """Render Codex audit aggregates and qualitative diagnostics."""
+    st.subheader("Codex audit")
+    metadata = report.get("metadata", {})
+    audited_at = str(metadata.get("audited_at", "")).replace("T", " ")[:19]
+    if audited_at:
+        st.caption(f"Last completed Codex audit: {audited_at} UTC")
+
+    metric_names = [
+        "context_precision",
+        "context_recall",
+        "faithfulness",
+        "answer_relevancy",
+        "answer_correctness",
+    ]
+    aggregate_scores = report.get("aggregate_scores", {})
+    metric_columns = st.columns(len(metric_names))
+    for column, name in zip(metric_columns, metric_names):
+        score = aggregate_scores.get(name)
+        value = "N/A" if score is None else f"{float(score):.2f}"
+        column.metric(metric_label(name), value)
+
+    summary = report.get("disagreement_summary", {})
+    audited_count = summary.get("audited_question_count", 0)
+    disagreement_count = summary.get("ragas_disagreement_count", 0)
+    st.caption(
+        f"Audited questions: {audited_count}. "
+        f"Potential Ragas/Qwen disagreements: {disagreement_count}."
+    )
+
+    for item in report.get("per_question", []):
+        question_number = item.get("question_number", "?")
+        question = item.get("question", "")
+        label = f"Question {question_number}: {question}"
+        with st.expander(label):
+            if item.get("audit_error"):
+                st.error(item["audit_error"])
+                continue
+            st.write(item.get("overall_summary", ""))
+            if item.get("agrees_with_ragas") is False:
+                st.warning(
+                    item.get(
+                        "disagreement_notes",
+                        "Codex flagged a disagreement with the saved Ragas scores.",
+                    )
+                )
+            elif item.get("disagreement_notes"):
+                st.caption(item["disagreement_notes"])
+
+            score_rows = [
+                {
+                    "Metric": metric_label(name),
+                    "Score": item.get("scores", {}).get(name),
+                    "Rationale": item.get("rationales", {}).get(name, ""),
+                }
+                for name in metric_names
+            ]
+            st.dataframe(score_rows, width="stretch", hide_index=True)
+
+            root_causes = item.get("likely_root_causes", [])
+            if root_causes:
+                st.markdown("**Likely root causes:** " + ", ".join(root_causes))
+            fixes = item.get("recommended_fixes", [])
+            if fixes:
+                st.markdown("**Recommended fixes:**")
+                for fix in fixes:
+                    st.markdown(f"- {fix}")
+
+
 def render_evaluation_page(
     api_key: str | None,
     model_name: str,
@@ -887,6 +1056,7 @@ def render_evaluation_page(
     )
 
     report = load_evaluation_report()
+    codex_audit_report = load_codex_audit_report()
     button_label = "Restart evaluation" if report else "Start evaluation"
     disabled_reason = None
     if not collection_ready:
@@ -937,10 +1107,62 @@ def render_evaluation_page(
                     st.code(log_tail, language="text")
         progress.empty()
 
+    codex_disabled_reason = None
+    if not report:
+        codex_disabled_reason = "Run the Ragas evaluation before running a Codex audit."
+    else:
+        codex_ready, codex_error = codex_status()
+        if not codex_ready:
+            codex_disabled_reason = codex_error
+
+    audit_label = "Rerun Codex audit" if codex_audit_report else "Run Codex audit"
+    if st.button(
+        audit_label,
+        type="secondary",
+        disabled=codex_disabled_reason is not None,
+    ):
+        audit_progress = st.progress(0.0, text="Starting Codex audit")
+        with st.status("Running Codex audit", expanded=True) as status:
+            st.write(
+                "Codex audits each saved evaluation sample one at a time and "
+                "compares its qualitative judgment with the existing Ragas/Qwen scores."
+            )
+            try:
+                succeeded, error_message = run_codex_audit_process(
+                    status,
+                    audit_progress,
+                )
+            except (OSError, subprocess.SubprocessError) as exc:
+                succeeded = False
+                error_message = f"Could not start the Codex audit: {exc}"
+
+            if succeeded:
+                codex_audit_report = load_codex_audit_report()
+                status.update(
+                    label="Codex audit complete",
+                    state="complete",
+                    expanded=False,
+                )
+            else:
+                status.update(
+                    label="Codex audit failed",
+                    state="error",
+                    expanded=True,
+                )
+                st.error(error_message)
+                log_tail = codex_audit_log_tail()
+                if log_tail:
+                    st.code(log_tail, language="text")
+        audit_progress.empty()
+
     if disabled_reason:
         st.warning(disabled_reason)
+    if codex_disabled_reason:
+        st.info(codex_disabled_reason)
     if report:
         render_evaluation_results(report)
+        if codex_audit_report:
+            render_codex_audit_results(codex_audit_report)
     else:
         st.info("No evaluation results yet. Start an evaluation to calculate the metrics.")
 

@@ -1,0 +1,240 @@
+{
+  "metadata": {
+    "schema_version": 1,
+    "audited_at": "2026-06-18T12:15:00.768969+00:00",
+    "source_report_path": "D:\\Programming\\source-highlighter-rag\\evaluation_results.json",
+    "codex_command": [
+      "C:\\Users\\pithw\\AppData\\Local\\OpenAI\\Codex\\bin\\330bd0cba6496126\\codex.exe",
+      "exec",
+      "--ephemeral",
+      "--sandbox",
+      "read-only",
+      "--output-schema",
+      "<runtime-schema-path>",
+      "<per-question-prompt>"
+    ],
+    "question_count": 7
+  },
+  "per_question": [
+    {
+      "question_number": 1,
+      "question": "Was the Equifax breach caused by an unknown zero-day vulnerability or a known vulnerability that should have been patched?",
+      "scores": {
+        "context_precision": 0.9,
+        "context_recall": 0.85,
+        "faithfulness": 1.0,
+        "answer_relevancy": 1.0,
+        "answer_correctness": 0.85
+      },
+      "rationales": {
+        "context_precision": "Most retrieved contexts directly discuss the Apache Struts vulnerability, public disclosure, patch process, and Equifax's failure to patch; one outsourcing/audit snippet is only marginally relevant.",
+        "context_recall": "Contexts contain the key evidence that the vulnerability was public, known, patchable, and preventable, but they do not visibly include the CVE identifier from the reference points.",
+        "faithfulness": "The generated answer is supported by retrieved contexts: March 7 public disclosure, Equifax alert, Apache Struts, and the 48-hour patch instruction all appear in the evidence.",
+        "answer_relevancy": "The answer directly resolves the zero-day versus known-vulnerability question without adding unrelated material.",
+        "answer_correctness": "The answer matches the central reference: known Apache Struts vulnerability, publicly disclosed in March 2017, patch available. It omits CVE-2017-5638 and does not explicitly say preventable."
+      },
+      "agrees_with_ragas": false,
+      "disagreement_notes": "The saved faithfulness score is far too low because the generated claims are plainly grounded in the retrieved contexts. Answer relevancy also appears understated.",
+      "likely_root_causes": [
+        "evaluator_issue"
+      ],
+      "recommended_fixes": [
+        "Raise faithfulness because each generated claim is supported by context 2 or related GAO excerpts.",
+        "Lower context_recall slightly for missing the explicit CVE-2017-5638 evidence.",
+        "Keep a small correctness penalty for omitting the CVE and explicit preventability point."
+      ],
+      "overall_summary": "Retrieval and answer quality are strong for the asked question. The visible evidence supports the generated answer, so the saved Ragas pattern is not broadly reliable for this sample."
+    },
+    {
+      "question_number": 2,
+      "question": "Which control failures allowed attackers to expand from the vulnerable dispute portal to unrelated databases and remain undetected?",
+      "scores": {
+        "context_precision": 0.95,
+        "context_recall": 0.9,
+        "faithfulness": 0.95,
+        "answer_relevancy": 0.92,
+        "answer_correctness": 0.78
+      },
+      "rationales": {
+        "context_precision": "Nearly all retrieved passages directly discuss the Equifax portal breach controls: segmentation, credentials, certificates, query limits, and detection gaps.",
+        "context_recall": "Contexts contain most reference points, including missed vulnerability discovery, segmentation, plain-text credentials, expired certificates, and data governance/access-control weaknesses.",
+        "faithfulness": "The generated claims are well supported by the retrieved passages; encrypted protocols, expired certificates, file shares, credentials, and weak monitoring all appear in context.",
+        "answer_relevancy": "The answer directly addresses how attackers expanded from the portal and stayed undetected.",
+        "answer_correctness": "The answer matches most reference points but underplays the failure to identify the portal vulnerability and does not explicitly name weak access controls/data governance."
+      },
+      "agrees_with_ragas": false,
+      "disagreement_notes": "Saved Ragas scores for faithfulness, relevancy, and correctness are too low versus the visible evidence; the generated answer is mostly grounded and on-topic.",
+      "likely_root_causes": [
+        "evaluator_issue"
+      ],
+      "recommended_fixes": [
+        "Raise faithfulness because each major generated claim is supported by retrieved context.",
+        "Raise answer relevancy because the response directly answers the control-failure question.",
+        "Score correctness moderately high but penalize omission of the missed vulnerability identification and explicit access-control/data-governance framing."
+      ],
+      "overall_summary": "Retrieval and answer quality are strong for this sample despite one missing expected source and a couple of incomplete reference points."
+    },
+    {
+      "question_number": 3,
+      "question": "How did major federal customers respond to the breach, including contract and identity-proofing changes?",
+      "scores": {
+        "context_precision": 0.82,
+        "context_recall": 1.0,
+        "faithfulness": 0.96,
+        "answer_relevancy": 0.95,
+        "answer_correctness": 0.92
+      },
+      "rationales": {
+        "context_precision": "Most contexts directly cover IRS, SSA, USPS assessments, contract changes, and identity-proofing actions; a few appendix/background chunks are only indirectly useful.",
+        "context_recall": "The retrieved contexts contain all reference points: control assessments, prompt breach notification, IRS contract termination, and identity-proofing revisions.",
+        "faithfulness": "The answer is well supported by the contexts, with only slight over-compression around IRS identity-proofing versus contractor and incident-handling controls.",
+        "answer_relevancy": "The answer directly addresses how federal customers responded, including contracts and identity-proofing changes.",
+        "answer_correctness": "It matches all ground-truth points and adds supported details, though some identity-proofing wording is broader than the reference."
+      },
+      "agrees_with_ragas": false,
+      "disagreement_notes": "The saved answer_relevancy score is too low for an answer that directly and completely addresses the question using the retrieved evidence.",
+      "likely_root_causes": [
+        "evaluator_issue"
+      ],
+      "recommended_fixes": [
+        "Raise answer_relevancy for direct, on-topic multi-part answers.",
+        "Keep precision slightly below perfect because several retrieved chunks are methodology or background rather than answer evidence."
+      ],
+      "overall_summary": "This is a strong sample: retrieval covers the needed evidence and the generated answer is mostly faithful and correct, with minor over-broad wording."
+    },
+    {
+      "question_number": 4,
+      "question": "Compare the FTC complaint's security allegations with the safeguards required by the stipulated order.",
+      "scores": {
+        "context_precision": 0.65,
+        "context_recall": 0.25,
+        "faithfulness": 0.9,
+        "answer_relevancy": 0.55,
+        "answer_correctness": 0.2
+      },
+      "rationales": {
+        "context_precision": "Several chunks are relevant complaint/Safeguards Rule passages, but order chunks mostly show recordkeeping and extra House report material distracts from required safeguards.",
+        "context_recall": "Retrieved contexts cover generic Safeguards Rule and complaint allegations, but miss key order requirements: patch deadlines, asset inventory, access controls, credential protection, testing, and twenty-year program.",
+        "faithfulness": "The generated answer is largely supported by the retrieved complaint and order-recordkeeping excerpts, though it overfocuses on record retention as the order safeguard.",
+        "answer_relevancy": "It addresses security allegations generally, but does not truly compare them with the specific stipulated-order safeguards requested.",
+        "answer_correctness": "It omits nearly all ground-truth points and substitutes generic Safeguards Rule duties plus recordkeeping instead of the order\u00e2\u20ac\u2122s required safeguards."
+      },
+      "agrees_with_ragas": false,
+      "disagreement_notes": "The saved zero precision is too harsh because multiple retrieved chunks are relevant to the complaint and Safeguards Rule; zero recall is also too harsh because some complaint/generic rule evidence is present, though the key order safeguards are missing.",
+      "likely_root_causes": [
+        "retrieval_issue",
+        "answer_generation_issue",
+        "evaluator_issue"
+      ],
+      "recommended_fixes": [
+        "Retrieve the stipulated order sections describing the mandated information security program and specific safeguards, not only recordkeeping pages.",
+        "Generate a point-by-point comparison mapping complaint failures to patch management, asset inventory, access control, credential protection, testing, and twenty-year program requirements.",
+        "Adjust evaluation so context precision gives partial credit for relevant complaint/rule chunks instead of forcing 0.0."
+      ],
+      "overall_summary": "Retrieval partially supports the complaint side but misses the order\u00e2\u20ac\u2122s core safeguard obligations, causing the answer to be faithful to weak context while incorrect against the reference."
+    },
+    {
+      "question_number": 5,
+      "question": "What board certifications, independent assessments, and incident reporting duties did the FTC order impose?",
+      "scores": {
+        "context_precision": 0.75,
+        "context_recall": 0.8,
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.75,
+        "answer_correctness": 0.6
+      },
+      "rationales": {
+        "context_precision": "Most retrieved chunks are from the FTC order and directly cover assessments, incident reports, or annual certification; two chunks from FCA/GAO are irrelevant.",
+        "context_recall": "Contexts contain annual board certification, biennial independent assessments, assessor evidence/gap duties, and covered incident reports, but not the quarterly board summaries point.",
+        "faithfulness": "The generated claims about assessor qualifications, assessment contents, and covered incident reporting are supported by the retrieved FTC excerpts.",
+        "answer_relevancy": "The answer addresses independent assessments and incident reporting, but omits the board certification duties asked in the question.",
+        "answer_correctness": "It covers independent biennial assessment duties and covered incident reports, but misses annual board certification and quarterly board summaries from the reference."
+      },
+      "agrees_with_ragas": false,
+      "disagreement_notes": "The saved 0.0 context_precision and 0.0 context_recall are inconsistent with the visible FTC chunks, which contain most reference evidence.",
+      "likely_root_causes": [
+        "answer_generation_issue",
+        "evaluator_issue",
+        "retrieval_issue"
+      ],
+      "recommended_fixes": [
+        "Include the annual board certification requirement and its twenty-year duration in the answer.",
+        "Retrieve or add the FTC chunk covering quarterly board summaries.",
+        "Filter out FCA and GAO chunks for this FTC-order question."
+      ],
+      "overall_summary": "Retrieval is mostly relevant and sufficient, but the generated answer omits key board-related duties; the saved Ragas context scores look unreliable for this sample."
+    },
+    {
+      "question_number": 6,
+      "question": "Why did the FCA penalize Equifax Ltd, and what was the final penalty?",
+      "scores": {
+        "context_precision": 0.85,
+        "context_recall": 0.75,
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.55,
+        "answer_correctness": 0.35
+      },
+      "rationales": {
+        "context_precision": "Most chunks are from the FCA notice and relate to sanction, penalty calculation, incident handling, outsourcing, communications, or complaints. Some penalty-calculation detail is less directly relevant but not wholly irrelevant.",
+        "context_recall": "Contexts include the final penalty, outsourcing relationship, cybersecurity incident, delayed/incorrect communications, and complaints handling failings, but they do not fully spell out all ground-truth reasons in one clear set.",
+        "faithfulness": "The generated answer's claims about the \u00c2\u00a311,164,400 penalty and breaches of Principles 3, 6, and 7 are directly supported by the retrieved context.",
+        "answer_relevancy": "The answer gives the final penalty but only states generic principle breaches instead of explaining why the FCA penalized Equifax Ltd.",
+        "answer_correctness": "It correctly states the penalty, but omits the specific reasons: inadequate outsourcing risk management, delayed consumer identification/notification, complaints QA failures, and misleading public statements."
+      },
+      "agrees_with_ragas": false,
+      "disagreement_notes": "The saved context_precision of 0.0 is too harsh because the retrieved chunks are mostly relevant, and faithfulness of 0.5 is too low because the generated claims are supported; the main problem is omission, not unsupported content.",
+      "likely_root_causes": [
+        "answer_generation_issue",
+        "evaluator_issue"
+      ],
+      "recommended_fixes": [
+        "Generate a reason summary from the Summary of Reasons and relevant conduct sections, not only the penalty section.",
+        "Keep the final penalty but add the concrete FCA findings on outsourcing, notification delays, complaints handling, and public statements.",
+        "Adjust evaluation so omissions affect answer_correctness/relevancy more than faithfulness when stated claims are grounded."
+      ],
+      "overall_summary": "Retrieval is mostly adequate and the answer is faithful to the retrieved penalty evidence, but the answer is incomplete because it does not explain the FCA's reasons beyond generic principle breaches."
+    },
+    {
+      "question_number": 7,
+      "question": "What enterprise lessons recur across the congressional, GAO, FTC, and FCA records?",
+      "scores": {
+        "context_precision": 0.45,
+        "context_recall": 0.25,
+        "faithfulness": 0.9,
+        "answer_relevancy": 0.45,
+        "answer_correctness": 0.2
+      },
+      "rationales": {
+        "context_precision": "Some chunks are relevant to Equifax data security and one directly supports the generated lesson, but many are background enforcement excerpts and three expected sources are absent.",
+        "context_recall": "Retrieved contexts do not contain most reference points: technical enforcement, ownership, segmentation, board accountability, and outsourcing responsibility are largely missing.",
+        "faithfulness": "The generated answer is mostly supported by the House chunk on prioritizing critical systems/sensitive data and moving too slowly off legacy systems.",
+        "answer_relevancy": "The answer gives enterprise lessons, but only two narrow lessons and does not address the requested cross-record recurrence across congressional, GAO, FTC, and FCA records.",
+        "answer_correctness": "It partially overlaps with prioritizing sensitive data but omits nearly all ground-truth points and does not cover boards, outsourcing, ownership, segmentation, or verification."
+      },
+      "agrees_with_ragas": false,
+      "disagreement_notes": "The saved context_recall of 1.0 is inconsistent with missing expected sources and absent ground-truth evidence; faithfulness of 0.0 is also too harsh because the generated claims are directly supported by retrieved chunk 84.",
+      "likely_root_causes": [
+        "retrieval_issue",
+        "answer_generation_issue",
+        "evaluator_issue"
+      ],
+      "recommended_fixes": [
+        "Retrieve FTC complaint, FTC order, and FCA final notice chunks for cross-record lessons.",
+        "Add chunks covering technical control verification, asset ownership, segmentation, board accountability, and outsourcing responsibility.",
+        "Make the answer enumerate the recurring lessons from all requested record types."
+      ],
+      "overall_summary": "Retrieval captured a small relevant slice but missed most expected evidence. The answer is faithful to that slice but incomplete against the reference."
+    }
+  ],
+  "aggregate_scores": {
+    "context_precision": 0.7671428571428571,
+    "context_recall": 0.6857142857142857,
+    "faithfulness": 0.9585714285714285,
+    "answer_relevancy": 0.7385714285714285,
+    "answer_correctness": 0.5571428571428572
+  },
+  "disagreement_summary": {
+    "audited_question_count": 7,
+    "ragas_disagreement_count": 7
+  }
+}
