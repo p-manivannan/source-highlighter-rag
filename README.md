@@ -100,8 +100,3 @@ The evaluation report includes context precision, context recall, faithfulness, 
 uv run pytest
 ```
 
-## Resume Highlights
-
-- Built a citation-grounded RAG system that converts PDF answers into inspectable, claim-level evidence links.
-- Implemented hybrid retrieval with ChromaDB vector search, HuggingFace embeddings, and BM25 keyword scoring.
-- Delivered a full-stack AI workflow with Streamlit, React/TypeScript PDF highlighting, and Ragas-based quality evaluation.
